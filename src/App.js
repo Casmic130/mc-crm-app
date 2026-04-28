@@ -17,6 +17,7 @@ const firebaseConfig = {
   appId: "1:582721987377:web:fc5206c3582ceb88414610"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
