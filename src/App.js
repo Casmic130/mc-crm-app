@@ -9,14 +9,13 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCDJI-5TN_EfQoKbdBLpD0sUm8AGQgC7YU",
+  apiKey: "AIzaSyCDJIf-5TN_EfQ0KbdBLpD0sUm8AGQgC7U",
   authDomain: "mc-crm-ac51e.firebaseapp.com",
   projectId: "mc-crm-ac51e",
   storageBucket: "mc-crm-ac51e.firebasestorage.app",
   messagingSenderId: "582721987377",
-  appId: "1:582721987377:web:fc5206c3582ceb88414610"
+  appId: "1:582721987377:web:fc5206c3582ceb88414610",
 };
-
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -51,7 +50,6 @@ function App() {
       setUser(currentUser);
       setAuthLoading(false);
     });
-
     return () => unsub();
   }, []);
 
@@ -148,12 +146,22 @@ function App() {
   });
 
   function exportCSV() {
-    if (leads.length === 0) {
+    if (!leads || leads.length === 0) {
       alert("No hay leads para exportar.");
       return;
     }
 
-    const headers = ["Company", "Contact", "Email", "Phone", "Address", "Status", "Follow Up", "Notes", "Created"];
+    const headers = [
+      "Company",
+      "Contact",
+      "Email",
+      "Phone",
+      "Address",
+      "Status",
+      "Follow Up",
+      "Notes",
+      "Created",
+    ];
 
     const rows = leads.map((lead) => [
       lead.company,
@@ -163,21 +171,31 @@ function App() {
       lead.address,
       lead.status,
       lead.followUpDate || "",
-      lead.notes,
+      lead.notes || "",
       lead.createdAt || "",
     ]);
 
     const csvContent = [headers, ...rows]
-      .map((row) => row.map((item) => `"${String(item || "").replace(/"/g, '""')}"`).join(","))
+      .map((row) =>
+        row
+          .map((item) => `"${String(item || "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
       .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
 
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "mc-property-leads.csv";
+
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   }
@@ -295,17 +313,47 @@ function App() {
           )}
 
           <section className="stats">
-            <div><b>NUEVOS</b><strong>{leads.filter((l) => l.status === "Nueva").length}</strong></div>
-            <div><b>SEGUIMIENTO</b><strong>{leads.filter((l) => l.status === "En Seguimiento").length}</strong></div>
-            <div><b>CERRADOS</b><strong>{leads.filter((l) => l.status === "Cerrado").length}</strong></div>
-            <div><b>TOTAL</b><strong>{leads.length}</strong></div>
+            <div>
+              <b>NUEVOS</b>
+              <strong>{leads.filter((l) => l.status === "Nueva").length}</strong>
+            </div>
+
+            <div>
+              <b>SEGUIMIENTO</b>
+              <strong>{leads.filter((l) => l.status === "En Seguimiento").length}</strong>
+            </div>
+
+            <div>
+              <b>CERRADOS</b>
+              <strong>{leads.filter((l) => l.status === "Cerrado").length}</strong>
+            </div>
+
+            <div>
+              <b>TOTAL</b>
+              <strong>{leads.length}</strong>
+            </div>
           </section>
 
           <section className="stats followStats">
-            <div><b>FOLLOW-UP HOY</b><strong>{followToday}</strong></div>
-            <div><b>VENCIDOS</b><strong>{followOverdue}</strong></div>
-            <div><b>PRÓXIMOS</b><strong>{followUpcoming}</strong></div>
-            <div><b>SIN FECHA</b><strong>{leads.filter((l) => !l.followUpDate).length}</strong></div>
+            <div>
+              <b>FOLLOW-UP HOY</b>
+              <strong>{followToday}</strong>
+            </div>
+
+            <div>
+              <b>VENCIDOS</b>
+              <strong>{followOverdue}</strong>
+            </div>
+
+            <div>
+              <b>PRÓXIMOS</b>
+              <strong>{followUpcoming}</strong>
+            </div>
+
+            <div>
+              <b>SIN FECHA</b>
+              <strong>{leads.filter((l) => !l.followUpDate).length}</strong>
+            </div>
           </section>
 
           <section className="formBox">
@@ -333,7 +381,10 @@ function App() {
               <button className="goldBtn" onClick={saveLead}>
                 {editingId ? "✅ ACTUALIZAR LEAD" : "💾 GUARDAR LEAD"}
               </button>
-              <button className="darkBtn" onClick={clearForm}>🔄 LIMPIAR</button>
+
+              <button className="darkBtn" onClick={clearForm}>
+                🔄 LIMPIAR
+              </button>
             </div>
           </section>
 
@@ -344,7 +395,10 @@ function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por compañía, contacto, email, teléfono, follow-up o notas..."
               />
-              <button className="goldBtn" onClick={exportCSV}>📤 EXPORTAR CSV</button>
+
+              <button className="goldBtn" onClick={exportCSV}>
+                📤 EXPORTAR CSV
+              </button>
             </div>
 
             <table>
@@ -373,15 +427,30 @@ function App() {
                       <td>{lead.company}</td>
                       <td>{lead.contact}</td>
                       <td>
-                        {lead.email ? <a href={`mailto:${lead.email}`} className="link">{lead.email}</a> : "-"}
+                        {lead.email ? (
+                          <a href={`mailto:${lead.email}`} className="link">
+                            {lead.email}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
                       </td>
+
                       <td>
-                        {lead.phone ? <a href={`tel:${lead.phone}`} className="link">{lead.phone}</a> : "-"}
+                        {lead.phone ? (
+                          <a href={`tel:${lead.phone}`} className="link">
+                            {lead.phone}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
                       </td>
+
                       <td>{lead.address}</td>
                       <td><span className="status">{lead.status}</span></td>
                       <td><span className={followClass(lead.followUpDate)}>{lead.followUpDate || "Sin fecha"}</span></td>
                       <td>{lead.notes}</td>
+
                       <td>
                         <button className="edit" onClick={() => editLead(lead)}>✏️</button>
                         <button className="delete" onClick={() => deleteLead(lead.id)}>🗑️</button>
