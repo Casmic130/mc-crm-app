@@ -1,9 +1,29 @@
 import { useEffect, useState } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCDJIf-5TN_EfQ0KbdBLpD0sUm8AGQgC7U",
+  authDomain: "mc-crm-ac51e.firebaseapp.com",
+  projectId: "mc-crm-ac51e",
+  storageBucket: "mc-crm-ac51e.firebasestorage.app",
+  messagingSenderId: "582721987377",
+  appId: "1:582721987377:web:fc5206c3582ceb88414610",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 function App() {
-  const [screen, setScreen] = useState("login");
-  const [login, setLogin] = useState({ username: "", password: "" });
-  const [loginError, setLoginError] = useState("");
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
 
@@ -26,31 +46,46 @@ function App() {
   });
 
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("mc_leads", JSON.stringify(leads));
   }, [leads]);
 
   const today = new Date().toISOString().split("T")[0];
 
   const followToday = leads.filter((l) => l.followUpDate === today).length;
-  const followOverdue = leads.filter(
-    (l) => l.followUpDate && l.followUpDate < today
-  ).length;
-  const followUpcoming = leads.filter(
-    (l) => l.followUpDate && l.followUpDate > today
-  ).length;
+  const followOverdue = leads.filter((l) => l.followUpDate && l.followUpDate < today).length;
+  const followUpcoming = leads.filter((l) => l.followUpDate && l.followUpDate > today).length;
 
   function handleLoginChange(e) {
-    setLogin({ ...login, [e.target.name]: e.target.value });
+    setLoginData({ ...loginData, [e.target.name]: e.target.value });
   }
 
-  function doLogin() {
-    if (login.username === "admin" && login.password === "1234") {
-      setScreen("dashboard");
-      setLoginError("");
-      setLogin({ username: "", password: "" });
-    } else {
-      setLoginError("Usuario o password incorrecto.");
+  async function login() {
+    try {
+      await signInWithEmailAndPassword(auth, loginData.email, loginData.password);
+    } catch (error) {
+      alert("Error login: " + error.message);
     }
+  }
+
+  async function register() {
+    try {
+      await createUserWithEmailAndPassword(auth, loginData.email, loginData.password);
+    } catch (error) {
+      alert("Error registro: " + error.message);
+    }
+  }
+
+  async function logout() {
+    await signOut(auth);
   }
 
   function handleChange(e) {
@@ -69,11 +104,7 @@ function App() {
     }
 
     if (editingId) {
-      setLeads(
-        leads.map((lead) =>
-          lead.id === editingId ? { ...lead, ...form } : lead
-        )
-      );
+      setLeads(leads.map((lead) => (lead.id === editingId ? { ...lead, ...form } : lead)));
       clearForm();
       return;
     }
@@ -100,6 +131,7 @@ function App() {
       followUpDate: lead.followUpDate || "",
       notes: lead.notes || "",
     });
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -120,17 +152,7 @@ function App() {
       return;
     }
 
-    const headers = [
-      "Company",
-      "Contact",
-      "Email",
-      "Phone",
-      "Address",
-      "Status",
-      "Follow Up",
-      "Notes",
-      "Created",
-    ];
+    const headers = ["Company", "Contact", "Email", "Phone", "Address", "Status", "Follow Up", "Notes", "Created"];
 
     const rows = leads.map((lead) => [
       lead.company,
@@ -145,11 +167,7 @@ function App() {
     ]);
 
     const csvContent = [headers, ...rows]
-      .map((row) =>
-        row
-          .map((item) => `"${String(item || "").replace(/"/g, '""')}"`)
-          .join(",")
-      )
+      .map((row) => row.map((item) => `"${String(item || "").replace(/"/g, '""')}"`).join(","))
       .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -170,7 +188,18 @@ function App() {
     return "followDate";
   }
 
-  if (screen === "login") {
+  if (authLoading) {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="loginScreen">
+          <h1>Cargando...</h1>
+        </div>
+      </>
+    );
+  }
+
+  if (!user) {
     return (
       <>
         <style>{styles}</style>
@@ -187,12 +216,13 @@ function App() {
             <p>Sign in to your CRM</p>
 
             <div className="inputRow">
-              <span>👤</span>
+              <span>📧</span>
               <input
-                name="username"
-                value={login.username}
+                name="email"
+                type="email"
+                value={loginData.email}
                 onChange={handleLoginChange}
-                placeholder="Username"
+                placeholder="Email"
               />
             </div>
 
@@ -200,18 +230,20 @@ function App() {
               <span>🔒</span>
               <input
                 name="password"
-                value={login.password}
-                onChange={handleLoginChange}
                 type="password"
+                value={loginData.password}
+                onChange={handleLoginChange}
                 placeholder="Password"
-                onKeyDown={(e) => e.key === "Enter" && doLogin()}
+                onKeyDown={(e) => e.key === "Enter" && login()}
               />
             </div>
 
-            {loginError && <p className="error">{loginError}</p>}
-
-            <button className="goldBtn" onClick={doLogin}>
+            <button className="goldBtn loginFull" onClick={login}>
               LOGIN
+            </button>
+
+            <button className="darkBtn loginFull" onClick={register}>
+              CREAR CUENTA
             </button>
           </div>
         </div>
@@ -234,14 +266,17 @@ function App() {
           <button>🔔 Follow Ups</button>
           <button onClick={exportCSV}>📤 Exportar CSV</button>
 
-          <button className="logout" onClick={() => setScreen("login")}>
+          <button className="logout" onClick={logout}>
             🚪 Cerrar Sesión
           </button>
         </aside>
 
         <main className="main">
           <header>
-            <h1>BIENVENIDO, MC PROPERTY</h1>
+            <div>
+              <h1>BIENVENIDO, MC PROPERTY</h1>
+              <small>{user.email}</small>
+            </div>
             <span>
               📅{" "}
               {new Date().toLocaleDateString("es-US", {
@@ -259,41 +294,17 @@ function App() {
           )}
 
           <section className="stats">
-            <div>
-              <b>NUEVOS</b>
-              <strong>{leads.filter((l) => l.status === "Nueva").length}</strong>
-            </div>
-            <div>
-              <b>SEGUIMIENTO</b>
-              <strong>{leads.filter((l) => l.status === "En Seguimiento").length}</strong>
-            </div>
-            <div>
-              <b>CERRADOS</b>
-              <strong>{leads.filter((l) => l.status === "Cerrado").length}</strong>
-            </div>
-            <div>
-              <b>TOTAL</b>
-              <strong>{leads.length}</strong>
-            </div>
+            <div><b>NUEVOS</b><strong>{leads.filter((l) => l.status === "Nueva").length}</strong></div>
+            <div><b>SEGUIMIENTO</b><strong>{leads.filter((l) => l.status === "En Seguimiento").length}</strong></div>
+            <div><b>CERRADOS</b><strong>{leads.filter((l) => l.status === "Cerrado").length}</strong></div>
+            <div><b>TOTAL</b><strong>{leads.length}</strong></div>
           </section>
 
           <section className="stats followStats">
-            <div>
-              <b>FOLLOW-UP HOY</b>
-              <strong>{followToday}</strong>
-            </div>
-            <div>
-              <b>VENCIDOS</b>
-              <strong>{followOverdue}</strong>
-            </div>
-            <div>
-              <b>PRÓXIMOS</b>
-              <strong>{followUpcoming}</strong>
-            </div>
-            <div>
-              <b>SIN FECHA</b>
-              <strong>{leads.filter((l) => !l.followUpDate).length}</strong>
-            </div>
+            <div><b>FOLLOW-UP HOY</b><strong>{followToday}</strong></div>
+            <div><b>VENCIDOS</b><strong>{followOverdue}</strong></div>
+            <div><b>PRÓXIMOS</b><strong>{followUpcoming}</strong></div>
+            <div><b>SIN FECHA</b><strong>{leads.filter((l) => !l.followUpDate).length}</strong></div>
           </section>
 
           <section className="formBox">
@@ -321,9 +332,7 @@ function App() {
               <button className="goldBtn" onClick={saveLead}>
                 {editingId ? "✅ ACTUALIZAR LEAD" : "💾 GUARDAR LEAD"}
               </button>
-              <button className="darkBtn" onClick={clearForm}>
-                🔄 LIMPIAR
-              </button>
+              <button className="darkBtn" onClick={clearForm}>🔄 LIMPIAR</button>
             </div>
           </section>
 
@@ -334,9 +343,7 @@ function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por compañía, contacto, email, teléfono, follow-up o notas..."
               />
-              <button className="goldBtn" onClick={exportCSV}>
-                📤 EXPORTAR CSV
-              </button>
+              <button className="goldBtn" onClick={exportCSV}>📤 EXPORTAR CSV</button>
             </div>
 
             <table>
@@ -365,30 +372,14 @@ function App() {
                       <td>{lead.company}</td>
                       <td>{lead.contact}</td>
                       <td>
-                        {lead.email ? (
-                          <a href={`mailto:${lead.email}`} className="link">
-                            {lead.email}
-                          </a>
-                        ) : (
-                          "-"
-                        )}
+                        {lead.email ? <a href={`mailto:${lead.email}`} className="link">{lead.email}</a> : "-"}
                       </td>
                       <td>
-                        {lead.phone ? (
-                          <a href={`tel:${lead.phone}`} className="link">
-                            {lead.phone}
-                          </a>
-                        ) : (
-                          "-"
-                        )}
+                        {lead.phone ? <a href={`tel:${lead.phone}`} className="link">{lead.phone}</a> : "-"}
                       </td>
                       <td>{lead.address}</td>
                       <td><span className="status">{lead.status}</span></td>
-                      <td>
-                        <span className={followClass(lead.followUpDate)}>
-                          {lead.followUpDate || "Sin fecha"}
-                        </span>
-                      </td>
+                      <td><span className={followClass(lead.followUpDate)}>{lead.followUpDate || "Sin fecha"}</span></td>
                       <td>{lead.notes}</td>
                       <td>
                         <button className="edit" onClick={() => editLead(lead)}>✏️</button>
@@ -464,13 +455,11 @@ body {
   margin: 0;
 }
 
-.loginBox p {
-  color: #d6d6d6;
-}
+.loginBox p { color: #d6d6d6; }
 
-.error {
-  color: #ff6b6b !important;
-  font-weight: bold;
+.loginFull {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .inputRow {
@@ -564,9 +553,7 @@ body {
   cursor: pointer;
 }
 
-.sidebar button:hover {
-  background: rgba(255,183,0,.18);
-}
+.sidebar button:hover { background: rgba(255,183,0,.18); }
 
 .logout { margin-top: 80px; }
 
@@ -585,6 +572,10 @@ header {
 header span {
   color: #f5b51b;
   font-weight: bold;
+}
+
+header small {
+  color: #38bdf8;
 }
 
 .alertBanner {
@@ -616,9 +607,7 @@ header span {
 }
 
 .stats b,
-.formBox h2 {
-  color: #f5b51b;
-}
+.formBox h2 { color: #f5b51b; }
 
 .stats strong {
   display: block;
@@ -626,13 +615,8 @@ header span {
   margin-top: 10px;
 }
 
-.followStats div:nth-child(1) strong {
-  color: #38bdf8;
-}
-
-.followStats div:nth-child(2) strong {
-  color: #ff6b6b;
-}
+.followStats div:nth-child(1) strong { color: #38bdf8; }
+.followStats div:nth-child(2) strong { color: #ff6b6b; }
 
 .grid {
   display: grid;
@@ -719,9 +703,7 @@ td {
   text-decoration: none;
 }
 
-.link:hover {
-  text-decoration: underline;
-}
+.link:hover { text-decoration: underline; }
 
 .edit,
 .delete {
