@@ -9,12 +9,12 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCDJIf-5TN_EfQ0KbdBLpD0sUm8AGQgC7U",
+  apiKey: "AIzaSyCDJI-5TN_EfQoKbdBLpD0sUm8AGQgC7YU",
   authDomain: "mc-crm-ac51e.firebaseapp.com",
   projectId: "mc-crm-ac51e",
   storageBucket: "mc-crm-ac51e.firebasestorage.app",
   messagingSenderId: "582721987377",
-  appId: "1:582721987377:web:fc5206c3582ceb88414610",
+  appId: "1:582721987377:web:fc5206c3582ceb88414610"
 };
 
 const app = initializeApp(firebaseConfig);
