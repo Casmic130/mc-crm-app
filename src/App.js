@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -27,6 +27,7 @@ function App() {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const importInputRef = useRef(null);
 
   const emptyForm = {
     company: "",
@@ -65,6 +66,225 @@ function App() {
   const followOverdue = leads.filter((l) => l.followUpDate && l.followUpDate < today).length;
   const followUpcoming = leads.filter((l) => l.followUpDate && l.followUpDate > today).length;
 
+  function normalizeCsvHeader(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function parseCsvLine(line) {
+    const cells = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      const next = line[i + 1];
+
+      if (char === '"' && inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
+
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (char === ',' && !inQuotes) {
+        cells.push(current);
+        current = "";
+        continue;
+      }
+
+      current += char;
+    }
+
+    cells.push(current);
+    return cells.map((cell) => cell.trim());
+  }
+
+  function parseCsvText(text) {
+    return text
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map(parseCsvLine);
+  }
+
+  function buildLeadFromHeaders(row, headers, index) {
+    const normalizedHeaders = headers.map(normalizeCsvHeader);
+    const source = {};
+
+    normalizedHeaders.forEach((header, headerIndex) => {
+      source[header] = row[headerIndex] ?? "";
+    });
+
+    const pick = (...keys) => {
+      for (const key of keys) {
+        if (source[key] !== undefined && source[key] !== null && String(source[key]).trim() !== "") {
+          return String(source[key]).trim();
+        }
+      }
+      return "";
+    };
+
+    const notesParts = [];
+    const baseNotes = pick("notes", "nota", "notas", "comments", "comment", "description", "descripcion");
+    const service = pick("service", "servicio");
+    const sourceName = pick("source", "fuente", "origin", "origen");
+    const score = pick("score", "puntaje", "rating");
+    const website = pick("website", "web", "site", "url");
+
+    if (baseNotes) notesParts.push(baseNotes);
+    if (service) notesParts.push(`Service: ${service}`);
+    if (sourceName) notesParts.push(`Source: ${sourceName}`);
+    if (score) notesParts.push(`Score: ${score}`);
+    if (website) notesParts.push(`Website: ${website}`);
+
+    const status = pick("status", "estado") || "Nueva";
+    const followUpDate = pick("followupdate", "followup", "followupfecha", "nextfollowup", "nextfollowupdate", "seguimiento");
+    const company = pick("company", "compania", "empresa", "business", "businessname", "name", "leadname");
+    const contact = pick("contact", "contacto", "name", "fullname", "nombre", "leadname") || company;
+    const email = pick("email", "correo", "mail");
+    const phone = pick("phone", "telefono", "celular", "mobile", "whatsapp");
+    const address = pick("address", "direccion", "city", "ciudad", "location");
+
+    return {
+      id: Date.now() + index,
+      createdAt: new Date().toLocaleDateString("es-US"),
+      company,
+      contact,
+      email,
+      phone,
+      address,
+      status,
+      followUpDate,
+      notes: notesParts.join(" | "),
+    };
+  }
+
+  function buildLeadFromFallbackRow(row, index) {
+    const value = (position) => String(row[position] ?? "").trim();
+
+    const company = value(1) || value(0);
+    const contact = value(0) || value(1);
+    const email = value(3) || value(2);
+    const phone = value(2) || value(3);
+    const address = value(4);
+    const status = value(8) || value(5) || "Nueva";
+    const followUpDate = value(6);
+    const notesParts = [value(7), value(5)].filter(Boolean);
+
+    return {
+      id: Date.now() + index,
+      createdAt: new Date().toLocaleDateString("es-US"),
+      company,
+      contact,
+      email,
+      phone,
+      address,
+      status,
+      followUpDate,
+      notes: notesParts.join(" | "),
+    };
+  }
+
+  async function importCSV(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const rows = parseCsvText(text);
+
+      if (rows.length === 0) {
+        alert("El archivo est� vac�o.");
+        return;
+      }
+
+      const firstRow = rows[0];
+      const normalizedFirstRow = firstRow.map(normalizeCsvHeader);
+      const headerHints = new Set([
+        "company",
+        "contact",
+        "contacto",
+        "email",
+        "phone",
+        "telefono",
+        "address",
+        "direccion",
+        "status",
+        "estado",
+        "followup",
+        "followupdate",
+        "notes",
+        "notas",
+        "name",
+        "companyname",
+        "source",
+        "score",
+        "website",
+        "city",
+        "ciudad",
+      ]);
+
+      const hasHeaders = normalizedFirstRow.some((header) => headerHints.has(header));
+      const dataRows = hasHeaders ? rows.slice(1) : rows;
+
+      const importedLeads = dataRows
+        .filter((row) => row.some((cell) => String(cell || "").trim() !== ""))
+        .map((row, index) => (hasHeaders ? buildLeadFromHeaders(row, firstRow, index) : buildLeadFromFallbackRow(row, index)))
+        .filter((lead) => lead.company || lead.contact || lead.email || lead.phone || lead.notes);
+
+      if (importedLeads.length === 0) {
+        alert("No pude detectar leads en ese archivo CSV.");
+        return;
+      }
+
+      const replaceCurrent = window.confirm(
+        `Encontr� ${importedLeads.length} leads.\n\nAceptar = reemplazar los leads actuales.\nCancelar = agregarlos al inicio.`
+      );
+
+      setLeads((currentLeads) => {
+        if (replaceCurrent) {
+          return importedLeads;
+        }
+
+        const merged = [...importedLeads, ...currentLeads];
+        const seen = new Set();
+
+        return merged.filter((lead) => {
+          const key = [lead.company, lead.contact, lead.email, lead.phone].join("|").toLowerCase();
+
+          if (key === "|||") {
+            return true;
+          }
+
+          if (seen.has(key)) {
+            return false;
+          }
+
+          seen.add(key);
+          return true;
+        });
+      });
+
+      setSearch("");
+      clearForm();
+      alert(`Importados ${importedLeads.length} lead(s) desde CSV.`);
+    } catch (error) {
+      alert("No pude importar el CSV: " + error.message);
+    }
+  }
   function handleLoginChange(e) {
     setLoginData({ ...loginData, [e.target.name]: e.target.value });
   }
@@ -193,6 +413,7 @@ function App() {
     return (
       <>
         <style>{styles}</style>
+      <input ref={importInputRef} type="file" accept=".csv,text/csv" onChange={importCSV} style={{ display: "none" }} />
         <div className="loginScreen">
           <h1>Cargando...</h1>
         </div>
@@ -204,6 +425,7 @@ function App() {
     return (
       <>
         <style>{styles}</style>
+      <input ref={importInputRef} type="file" accept=".csv,text/csv" onChange={importCSV} style={{ display: "none" }} />
 
         <div className="loginScreen">
           <div className="brand">
@@ -255,6 +477,7 @@ function App() {
   return (
     <>
       <style>{styles}</style>
+      <input ref={importInputRef} type="file" accept=".csv,text/csv" onChange={importCSV} style={{ display: "none" }} />
 
       <div className="dashboard">
         <aside className="sidebar">
@@ -265,7 +488,8 @@ function App() {
           <button>🏠 Dashboard</button>
           <button>👥 Leads</button>
           <button>🔔 Follow Ups</button>
-          <button onClick={exportCSV}>📤 Exportar CSV</button>
+          <button onClick={() => importInputRef.current?.click()}>?? Importar CSV</button>
+          <button onClick={exportCSV}>?? Exportar CSV</button>
 
           <button className="logout" onClick={logout}>
             🚪 Cerrar Sesión
@@ -344,7 +568,8 @@ function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por compañía, contacto, email, teléfono, follow-up o notas..."
               />
-              <button className="goldBtn" onClick={exportCSV}>📤 EXPORTAR CSV</button>
+              <button className="darkBtn" onClick={() => importInputRef.current?.click()}>?? IMPORTAR CSV</button>
+              <button className="goldBtn" onClick={exportCSV}>?? EXPORTAR CSV</button>
             </div>
 
             <table>
@@ -735,3 +960,4 @@ td {
 `;
 
 export default App;
+
