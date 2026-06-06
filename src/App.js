@@ -497,20 +497,36 @@ function App() {
         </aside>
 
         <main className="main">
-          <header>
-            <div>
-              <h1>BIENVENIDO, MC PROPERTY</h1>
-              <small>{user.email}</small>
-            </div>
-            <span>
-              📅{" "}
-              {new Date().toLocaleDateString("es-US", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-          </header>
+          <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+  <div>
+    <h1>BIENVENIDO, MC PROPERTY</h1>
+    <small>{user.email}</small>
+  </div>
+  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+    <button
+      type="button"
+      onClick={() => importInputRef.current?.click()}
+      style={{ padding: "10px 14px", borderRadius: "12px", border: "1px solid #d4a72c", background: "#111", color: "#f5c84c", fontWeight: 700, cursor: "pointer" }}
+    >
+      Importar CSV
+    </button>
+    <button
+      type="button"
+      onClick={exportCSV}
+      style={{ padding: "10px 14px", borderRadius: "12px", border: "none", background: "linear-gradient(180deg, #f5c84c, #c98d12)", color: "#111", fontWeight: 800, cursor: "pointer" }}
+    >
+      Exportar CSV
+    </button>
+    <span>
+      📅{" "}
+      {new Date().toLocaleDateString("es-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })}
+    </span>
+  </div>
+</header>
 
           {(followToday > 0 || followOverdue > 0) && (
             <div className="alertBanner">
@@ -960,4 +976,5 @@ td {
 `;
 
 export default App;
+
 
