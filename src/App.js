@@ -196,6 +196,97 @@ function App() {
     };
   }
 
+
+  function leadKey(lead) {
+    return [lead.company, lead.contact, lead.email, lead.phone].join("|").toLowerCase();
+  }
+
+  function mergeImportedLeads(currentLeads, importedLeads) {
+    const merged = [...importedLeads, ...currentLeads];
+    const seen = new Set();
+
+    return merged.filter((lead) => {
+      const key = leadKey(lead);
+
+      if (key === "|||") {
+        return true;
+      }
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function buildLeadFromChapie(lead, index) {
+    const title = String(lead.title || lead.name || "Chapie lead").replace(/^Potential painting client:\s*/i, "").trim();
+    const notesParts = [
+      lead.description || "",
+      lead.opportunity ? `Opportunity: ${lead.opportunity}` : "",
+      lead.recommendedService ? `Service: ${lead.recommendedService}` : "",
+      lead.temperature ? `Temperature: ${lead.temperature}` : "",
+      lead.leadCategory ? `Category: ${lead.leadCategory}` : "",
+      lead.needSignalType ? `Need signal: ${lead.needSignalType}` : "",
+      lead.contactUrl ? `Website: ${lead.contactUrl}` : "",
+      lead.url ? `Source: ${lead.url}` : "",
+      lead.outreachScript ? `Script: ${lead.outreachScript}` : "",
+    ].filter(Boolean);
+
+    return {
+      id: Date.now() + index,
+      createdAt: new Date().toLocaleDateString("es-US"),
+      company: title,
+      contact: title,
+      email: lead.email || "",
+      phone: lead.phone || "",
+      address: lead.area || "",
+      status: "Nueva",
+      followUpDate: "",
+      notes: notesParts.join(" | "),
+    };
+  }
+
+  async function importChapieOlatheLeads() {
+    try {
+      const response = await fetch("https://mc-property-agent-4syy.vercel.app/api/lead-search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "both",
+          kind: "painting",
+          area: "olathe",
+          maxQueries: 6,
+          maxCards: 100,
+          autoSave: false,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || result.note || `Chapie responded ${response.status}`);
+      }
+
+      const importedLeads = (result.leads || [])
+        .filter((lead) => lead.phone || lead.email)
+        .map(buildLeadFromChapie);
+
+      if (importedLeads.length === 0) {
+        alert("Chapie no encontro leads con telefono o email cerca de Olathe.");
+        return;
+      }
+
+      setLeads((currentLeads) => mergeImportedLeads(currentLeads, importedLeads));
+      setSearch("");
+      clearForm();
+      alert(`Importados ${importedLeads.length} lead(s) desde Chapie Olathe.`);
+    } catch (error) {
+      alert("No pude importar desde Chapie: " + error.message);
+    }
+  }
   async function importCSV(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -207,7 +298,7 @@ function App() {
       const rows = parseCsvText(text);
 
       if (rows.length === 0) {
-        alert("El archivo est� vac�o.");
+        alert("El archivo esta vacio.");
         return;
       }
 
@@ -251,7 +342,7 @@ function App() {
       }
 
       const replaceCurrent = window.confirm(
-        `Encontr� ${importedLeads.length} leads.\n\nAceptar = reemplazar los leads actuales.\nCancelar = agregarlos al inicio.`
+        `Encontre ${importedLeads.length} leads.\n\nAceptar = reemplazar los leads actuales.\nCancelar = agregarlos al inicio.`
       );
 
       setLeads((currentLeads) => {
@@ -320,7 +411,7 @@ function App() {
 
   function saveLead() {
     if (!form.company || !form.contact) {
-      alert("Poné por lo menos compañía y contacto.");
+      alert("Pon por lo menos compania y contacto.");
       return;
     }
 
@@ -357,7 +448,7 @@ function App() {
   }
 
   function deleteLead(id) {
-    if (window.confirm("¿Seguro que querés borrar este lead?")) {
+    if (window.confirm("Seguro que quieres borrar este lead?")) {
       setLeads(leads.filter((lead) => lead.id !== id));
     }
   }
@@ -439,7 +530,7 @@ function App() {
             <p>Sign in to your CRM</p>
 
             <div className="inputRow">
-              <span>📧</span>
+              <span>@</span>
               <input
                 name="email"
                 type="email"
@@ -450,7 +541,7 @@ function App() {
             </div>
 
             <div className="inputRow">
-              <span>🔒</span>
+              <span>*</span>
               <input
                 name="password"
                 type="password"
@@ -485,14 +576,15 @@ function App() {
           <h2>MC PROPERTY</h2>
           <p>SOLUTIONS</p>
 
-          <button>🏠 Dashboard</button>
-          <button>👥 Leads</button>
-          <button>🔔 Follow Ups</button>
-          <button onClick={() => importInputRef.current?.click()}>?? Importar CSV</button>
-          <button onClick={exportCSV}>?? Exportar CSV</button>
+          <button>Dashboard</button>
+          <button>Leads</button>
+          <button>Follow Ups</button>
+          <button onClick={importChapieOlatheLeads}>Importar Chapie Olathe</button>
+          <button onClick={() => importInputRef.current?.click()}>Importar CSV</button>
+          <button onClick={exportCSV}>Exportar CSV</button>
 
           <button className="logout" onClick={logout}>
-            🚪 Cerrar Sesión
+         Cerrar Sesion
           </button>
         </aside>
 
@@ -503,6 +595,13 @@ function App() {
     <small>{user.email}</small>
   </div>
   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+    <button
+      type="button"
+      onClick={importChapieOlatheLeads}
+      style={{ padding: "10px 14px", borderRadius: "12px", border: "1px solid #38bdf8", background: "#062033", color: "#8ee7ff", fontWeight: 700, cursor: "pointer" }}
+    >
+      Importar Chapie Olathe
+    </button>
     <button
       type="button"
       onClick={() => importInputRef.current?.click()}
@@ -518,7 +617,7 @@ function App() {
       Exportar CSV
     </button>
     <span>
-      📅{" "}
+    Fecha:{" "}
       {new Date().toLocaleDateString("es-US", {
         day: "numeric",
         month: "long",
@@ -530,7 +629,7 @@ function App() {
 
           {(followToday > 0 || followOverdue > 0) && (
             <div className="alertBanner">
-              🔔 Tenés {followToday} follow-up para hoy y {followOverdue} vencido(s).
+             Tienes {followToday} follow-up para hoy y {followOverdue} vencido(s).
             </div>
           )}
 
@@ -544,7 +643,7 @@ function App() {
           <section className="stats followStats">
             <div><b>FOLLOW-UP HOY</b><strong>{followToday}</strong></div>
             <div><b>VENCIDOS</b><strong>{followOverdue}</strong></div>
-            <div><b>PRÓXIMOS</b><strong>{followUpcoming}</strong></div>
+            <div><b>PROXIMOS</b><strong>{followUpcoming}</strong></div>
             <div><b>SIN FECHA</b><strong>{leads.filter((l) => !l.followUpDate).length}</strong></div>
           </section>
 
@@ -552,11 +651,11 @@ function App() {
             <h2>{editingId ? "EDITAR LEAD" : "AGREGAR LEAD"}</h2>
 
             <div className="grid">
-              <input name="company" value={form.company} onChange={handleChange} placeholder="Nombre de Compañía" />
+              <input name="company" value={form.company} onChange={handleChange} placeholder="Nombre de Compania" />
               <input name="contact" value={form.contact} onChange={handleChange} placeholder="Nombre del Contacto" />
               <input name="email" value={form.email} onChange={handleChange} placeholder="Email" />
-              <input name="phone" value={form.phone} onChange={handleChange} placeholder="Teléfono" />
-              <input name="address" value={form.address} onChange={handleChange} placeholder="Dirección" />
+              <input name="phone" value={form.phone} onChange={handleChange} placeholder="Telefono" />
+              <input name="address" value={form.address} onChange={handleChange} placeholder="Direccion" />
 
               <select name="status" value={form.status} onChange={handleChange}>
                 <option>Nueva</option>
@@ -571,9 +670,9 @@ function App() {
 
             <div className="actions">
               <button className="goldBtn" onClick={saveLead}>
-                {editingId ? "✅ ACTUALIZAR LEAD" : "💾 GUARDAR LEAD"}
+                {editingId ? "ACTUALIZAR LEAD" : "GUARDAR LEAD"}
               </button>
-              <button className="darkBtn" onClick={clearForm}>🔄 LIMPIAR</button>
+              <button className="darkBtn" onClick={clearForm}>LIMPIAR</button>
             </div>
           </section>
 
@@ -582,20 +681,21 @@ function App() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por compañía, contacto, email, teléfono, follow-up o notas..."
+                placeholder="Buscar por compania, contacto, email, telefono, follow-up o notas..."
               />
-              <button className="darkBtn" onClick={() => importInputRef.current?.click()}>?? IMPORTAR CSV</button>
-              <button className="goldBtn" onClick={exportCSV}>?? EXPORTAR CSV</button>
+              <button className="darkBtn" onClick={() => importInputRef.current?.click()}>IMPORTAR CSV</button>
+              <button className="darkBtn" onClick={importChapieOlatheLeads}>IMPORTAR CHAPIE OLATHE</button>
+              <button className="goldBtn" onClick={exportCSV}>EXPORTAR CSV</button>
             </div>
 
             <table>
               <thead>
                 <tr>
-                  <th>COMPAÑÍA</th>
+                  <th>COMPANIA</th>
                   <th>CONTACTO</th>
                   <th>EMAIL</th>
-                  <th>TELÉFONO</th>
-                  <th>DIRECCIÓN</th>
+                  <th>TELEFONO</th>
+                  <th>DIRECCION</th>
                   <th>ESTADO</th>
                   <th>FOLLOW-UP</th>
                   <th>NOTAS</th>
@@ -624,8 +724,8 @@ function App() {
                       <td><span className={followClass(lead.followUpDate)}>{lead.followUpDate || "Sin fecha"}</span></td>
                       <td>{lead.notes}</td>
                       <td>
-                        <button className="edit" onClick={() => editLead(lead)}>✏️</button>
-                        <button className="delete" onClick={() => deleteLead(lead.id)}>🗑️</button>
+                        <button className="edit" onClick={() => editLead(lead)}>Editar</button>
+                        <button className="delete" onClick={() => deleteLead(lead.id)}>Borrar</button>
                       </td>
                     </tr>
                   ))
@@ -976,5 +1076,3 @@ td {
 `;
 
 export default App;
-
-
